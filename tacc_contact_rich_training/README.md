@@ -12,14 +12,26 @@ Run the full Isaac Lab RL training for the contact-rich gear assembly task using
    /usr/local/etc/taccinfo
    ```
 
-## Step 1: Clone the task repo to `$WORK`
+## Step 1: Transfer the task repo to `$WORK`
 
-Clone once from a login node. `$WORK` persists across login and compute nodes.
+TACC login nodes are shared resources — do not run `git clone` or other network-heavy operations on them. Instead, transfer files from your local machine using `scp` or `rsync`.
+
+Transfer to `$WORK` (1 TB quota, persists across login and compute nodes). Do not use `$HOME` (15 GB limit, dotfiles only).
 
 ```bash
-cd $WORK
-git clone <contact_rich_robot_manipulation_skills_repo_url> contact_rich
+# Run on your local machine
+rsync -avz --progress /path/to/contact_rich_robot_manipulation_skills/ \
+  <username>@stampede3.tacc.utexas.edu:/work2/10323/<username>/stampede3/contact_rich/
 ```
+
+Or with `scp`:
+
+```bash
+scp -r /path/to/contact_rich_robot_manipulation_skills \
+  <username>@stampede3.tacc.utexas.edu:/work2/10323/<username>/stampede3/contact_rich
+```
+
+> Your `$WORK` path is `/work2/10323/<username>/stampede3`. You can find it on Stampede3 by running `echo $WORK`.
 
 The repo is documentation-based — the actual task environment is registered in the Isaac Lab container. No additional install is needed inside the container; the container's `/workspace/isaaclab` already includes the gear assembly task under `isaaclab_tasks`.
 

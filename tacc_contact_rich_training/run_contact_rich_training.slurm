@@ -2,8 +2,7 @@
 #SBATCH -J gear_assembly_train
 #SBATCH -p amd-rtx
 #SBATCH -N 1                           # 1 node
-#SBATCH -n 8                           # 8 tasks (one per GPU)
-#SBATCH --gpus-per-node=8             # all 8 RTX PRO 6000 GPUs on the node
+#SBATCH -n 1                           # 1 task (Isaac Lab handles multi-GPU internally)
 #SBATCH -t 24:00:00                    # 24-hour wall time for full training
 #SBATCH -o gear_assembly_train.%j.out
 #SBATCH -e gear_assembly_train.%j.err
