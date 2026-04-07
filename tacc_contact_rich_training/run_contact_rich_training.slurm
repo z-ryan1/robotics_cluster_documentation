@@ -16,8 +16,6 @@
 # Prerequisites:
 #   - Isaac Lab container pulled to $SCRATCH/containers/isaaclab/isaac-lab_2.3.2.sif
 #     (see tacc_stampede_isaaclab_container/ guide)
-#   - contact_rich_robot_manipulation_skills repo cloned to $WORK
-#     (see tacc_contact_rich_training/README.md for setup steps)
 #
 # Submit:
 #   sbatch run_contact_rich_training.slurm
@@ -51,15 +49,13 @@ mkdir -p "$RUN_DIR/results" "$RUN_DIR/kit-cache" "$RUN_DIR/kit-data" "$RUN_DIR/i
 echo "============================================================"
 echo "Job ID:      $SLURM_JOB_ID"
 echo "Node:        $SLURM_NODELIST"
-echo "GPUs:        $SLURM_GPUS_ON_NODE"
 echo "Output dir:  $RUN_DIR"
 echo "============================================================"
 
 # ── Launch training inside container ─────────────────────────────────────────
-# --distributed enables PyTorch DDP across all GPUs visible to the container.
-# --num_envs 2048 = 256 environments × 8 GPUs.
-# NOTE: If --distributed is not recognized by your Isaac Lab version, replace
-#       with: torchrun --nnodes=1 --nproc_per_node=8 /workspace/isaaclab/scripts/...
+# Uses isaaclab.sh -p -m torch.distributed.run to spawn one process per GPU
+# inside the container's Python environment. Each process runs 256 environments.
+# Total: 2048 environments across 8 GPUs.
 TERM=xterm apptainer exec --cleanenv --fakeroot --nv \
   --bind "$RUN_DIR/results:/results,$RUN_DIR/kit-cache:/isaac-sim/kit/cache,$RUN_DIR/kit-data:/isaac-sim/kit/data,$RUN_DIR/isaaclab-tmp:/tmp/isaaclab" \
   --pwd /results \
@@ -69,10 +65,12 @@ set -euo pipefail
 export OMNI_KIT_ACCEPT_EULA=YES
 export ACCEPT_EULA=Y
 
-/workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/scripts/reinforcement_learning/rsl_rl/train.py \
+/workspace/isaaclab/isaaclab.sh -p -m torch.distributed.run \
+  --nnodes=1 --nproc_per_node=8 \
+  /workspace/isaaclab/scripts/reinforcement_learning/rsl_rl/train.py \
   --task Isaac-Deploy-GearAssembly-UR10e-2F140-ROS-Inference-v0 \
   --headless \
-  --num_envs 2048 \
+  --num_envs 256 \
   --distributed \
   --video \
   --video_length 800 \

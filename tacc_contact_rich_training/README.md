@@ -103,32 +103,6 @@ ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_ass
 > cp -r $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs $WORK/gear_assembly_logs_<jobid>
 > ```
 
-## Verify the task is registered (optional pre-flight check)
-
-Before submitting the 24-hour job, confirm the task name is recognized by the container using a short interactive test:
-
-```bash
-idev -p amd-rtx -N 1 -n 1 -t 00:30:00
-
-# Inside the compute node:
-module reset && module load nvidia && module load tacc-apptainer/1.4.1
-ISAACLAB_SIF="$SCRATCH/containers/isaaclab/isaac-lab_2.3.2.sif"
-
-TERM=xterm apptainer exec --cleanenv --fakeroot --nv "$ISAACLAB_SIF" \
-  bash --noprofile --norc -lc '
-export OMNI_KIT_ACCEPT_EULA=YES
-export ACCEPT_EULA=Y
-/workspace/isaaclab/isaaclab.sh -p -c "
-import isaaclab_tasks  # noqa: F401
-from isaaclab.envs import ManagerBasedRLEnvCfg
-from omni.isaac.lab_tasks.utils import parse_env_cfg
-cfg = parse_env_cfg(\"Isaac-Deploy-GearAssembly-UR10e-2F140-ROS-Inference-v0\", num_envs=1)
-print(\"Task found:\", cfg)
-"
-'
-```
-
-If the task is not found, you'll need to bind-mount and install the gear assembly task source before training — open an issue or check the contact-rich repo's `README.md` for install instructions.
 
 ## How 8-GPU distributed training works
 
