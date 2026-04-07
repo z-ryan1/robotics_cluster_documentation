@@ -12,39 +12,19 @@ Run the full Isaac Lab RL training for the contact-rich gear assembly task using
    /usr/local/etc/taccinfo
    ```
 
-## Step 1: Transfer the task repo to `$WORK`
+## Step 1: Transfer the SLURM script to Stampede3
 
-TACC login nodes are shared resources — do not run `git clone` or other network-heavy operations on them. Instead, transfer files from your local machine using `scp` or `rsync`.
-
-Transfer to `$WORK` (1 TB quota, persists across login and compute nodes). Do not use `$HOME` (15 GB limit, dotfiles only).
+Transfer `run_contact_rich_training.slurm` to Stampede3 using `scp` or `rsync` from your local machine. Do not use `$HOME` (15 GB limit) — put it in `$WORK` or `$SCRATCH`.
 
 ```bash
-# Run on your local machine
-rsync -avz --progress /path/to/contact_rich_robot_manipulation_skills/ \
-  <username>@stampede3.tacc.utexas.edu:/work2/10323/<username>/stampede3/contact_rich/
+scp run_contact_rich_training.slurm <username>@stampede3.tacc.utexas.edu:$SCRATCH/
 ```
-
-Or with `scp`:
-
-```bash
-scp -r /path/to/contact_rich_robot_manipulation_skills \
-  <username>@stampede3.tacc.utexas.edu:/work2/10323/<username>/stampede3/contact_rich
-```
-
-> Your `$WORK` path is `/work2/10323/<username>/stampede3`. You can find it on Stampede3 by running `echo $WORK`.
-
-The repo is documentation-based — the actual task environment is registered in the Isaac Lab container. No additional install is needed inside the container; the container's `/workspace/isaaclab` already includes the gear assembly task under `isaaclab_tasks`.
-
-> If the gear assembly task is **not** bundled in the NGC container image, you would need to bind-mount the local task source and run `pip install -e` inside the container before training. Check that `Isaac-Deploy-GearAssembly-UR10e-2F140-ROS-Inference-v0` appears in the task registry first (see Verify section below).
 
 ## Step 2: Submit the training job
 
 ```bash
-cd $WORK/contact_rich   # or wherever you cloned this docs repo
-sbatch tacc_contact_rich_training/run_contact_rich_training.slurm
+sbatch run_contact_rich_training.slurm
 ```
-
-This submits a 24-hour job on 1 node using all 8 GPUs. Expected training time with 8 GPUs is roughly **3–6 hours** compared to 12–24 hours on a single GPU.
 
 ```bash
 # Check job status
@@ -53,36 +33,19 @@ squeue -u $USER
 
 ## Step 3: Monitor training
 
-### Watch the log
-
 ```bash
 # Follow live output (replace <jobid> with your SLURM job ID)
 tail -f gear_assembly_train.<jobid>.out
 ```
 
-Isaac Lab prints per-iteration reward stats as training progresses. You should see `mean_reward` trending upward after the first few thousand iterations.
-
-### TensorBoard from a login node
-
-Isaac Lab writes TensorBoard event files alongside the checkpoints. To view them:
-
-```bash
-# On the login node, find your run directory
-RUN_DIR="$SCRATCH/isaaclab_runs/gear_assembly_<jobid>"
-
-# Forward TensorBoard to your local machine (run this on your laptop)
-ssh -L 6006:localhost:6006 <username>@stampede3.tacc.utexas.edu \
-  "module load python3; pip install tensorboard -q; tensorboard --logdir $RUN_DIR/results/logs --port 6006"
-```
-
-Then open `http://localhost:6006` in your browser.
+Isaac Lab prints per-iteration stats as training progresses. You should see `Mean reward` trending upward over time. Training runs for 1500 iterations and takes approximately **24 hours** on this configuration.
 
 ## Step 4: Locate outputs
 
 After the job finishes, all artifacts are under:
 
 ```
-$SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly/<timestamp>/
+$SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly_ur10e/<timestamp>/
 ├── model_*.pt          # policy checkpoints (saved periodically)
 ├── params/             # run config snapshot
 └── videos/
@@ -91,10 +54,10 @@ $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly/<
 
 ```bash
 # List checkpoints
-ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly/*/model_*.pt
+ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly_ur10e/*/model_*.pt
 
 # List training videos
-ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly/*/videos/train/
+ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_assembly_ur10e/*/videos/train/
 ```
 
 > **Best practice — copy to `$WORK` before purge.**  
@@ -103,27 +66,18 @@ ls -lh $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs/rsl_rl/gear_ass
 > cp -r $SCRATCH/isaaclab_runs/gear_assembly_<jobid>/results/logs $WORK/gear_assembly_logs_<jobid>
 > ```
 
-
 ## How 8-GPU distributed training works
 
-The SLURM script passes `--distributed` to the Isaac Lab training script. This enables **PyTorch DDP (Distributed Data Parallel)** across all GPUs visible inside the Apptainer container:
+Uses `isaaclab.sh -p -m torch.distributed.run` to spawn one process per GPU inside the container's Python environment via PyTorch DDP:
 
 | Setting | Value |
 |---------|-------|
 | GPUs | 8× RTX PRO 6000 Blackwell (48 GB each) |
 | Environments per GPU | 256 |
 | **Total environments** | **2048** |
-| Training flag | `--num_envs 2048 --distributed` |
+| Launch command | `isaaclab.sh -p -m torch.distributed.run --nproc_per_node=8` |
 
-Each GPU runs 256 independent parallel simulation environments. The policy network gradients are synchronized across GPUs via DDP at each update step, giving the same convergence as a single-GPU run but roughly 8× faster wall time.
-
-> **Note:** If your Isaac Lab version does not support `--distributed` (check with `isaaclab.sh -p train.py --help`), replace it with:
-> ```bash
-> torchrun --nnodes=1 --nproc_per_node=8 \
->   /workspace/isaaclab/scripts/reinforcement_learning/rsl_rl/train.py \
->   --task Isaac-Deploy-GearAssembly-UR10e-2F140-ROS-Inference-v0 \
->   --headless --num_envs 2048 --video --video_length 800 --video_interval 5000
-> ```
+Each GPU runs 256 independent parallel simulation environments. The policy network gradients are synchronized across GPUs via DDP at each update step. Note that for this contact-rich task the physics simulation (collection) dominates iteration time, so wall-clock speedup over single-GPU is limited.
 
 ## Files in This Directory
 

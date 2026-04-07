@@ -9,9 +9,9 @@
 
 # Full training run for Isaac Lab gear assembly contact-rich manipulation task.
 # Uses all 8 RTX PRO 6000 Blackwell GPUs on a single amd-rtx node via
-# Isaac Lab's --distributed flag (PyTorch DDP). 2048 parallel environments
-# total (256 per GPU). Expected training time: ~3-6 hours at 8x GPU vs
-# ~12-24 hours on a single GPU.
+# PyTorch DDP (torch.distributed.run). 2048 parallel environments total
+# (256 per GPU). Expected training time: ~24 hours (1500 iterations).
+# Physics simulation dominates iteration time, limiting multi-GPU speedup.
 #
 # Prerequisites:
 #   - Isaac Lab container pulled to $SCRATCH/containers/isaaclab/isaac-lab_2.3.2.sif
